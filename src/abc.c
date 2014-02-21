@@ -52,6 +52,7 @@
 #include <sys/socket.h>
 #include <netpacket/packet.h>   /* sockaddr_ll */
 #include <net/if.h>   		/* ifa_flags */
+//#include <nl80211.h> /* kernel interface instead of iw */
 
 #include "packet.h"
 #include "mgmt.h"
