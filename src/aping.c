@@ -8,7 +8,8 @@
 
 #include <stdio.h> /* snprintf */
 #include <stdlib.h>
-#include "lib/log.h" /* TODO: remove lib/ */
+#include <string.h> /* bzero */
+#include "lib/log.h"
 #include "lib/priority.h"
 #include "packet.h"
 
@@ -19,16 +20,25 @@ static void init_ping_packet (char * buf) {
   struct allnet_header * hp = (struct allnet_header *) buf;
   // char * payloadp = hp + sizeof (struct allnet_header);
   hp->version = ALLNET_VERSION;
-  //hp->packet_type = ALLNET_TYPE_MGMT;
+  hp->message_type = ALLNET_TYPE_CLEAR;
   hp->hops = 0;
   hp->max_hops = 1; // CHECK: experiment with recursive deep ping?
   hp->src_nbits = 0; // ADDRESS_BITS;
   hp->dst_nbits = 0;
   hp->sig_algo = ALLNET_SIGTYPE_NONE; // CHECK: sign pings -> requires nonce since header probably isn't signed?
+  hp->transport = ALLNET_TRANSPORT_ACK_REQ;
+  // hp->source = 0;
+  bzero (hp->source, sizeof (hp->source)); // my addr
+  // hp->destination = 0;
+  bzero (hp->destination, sizeof (hp->source)); // dest addr
+  /* standard header has no field message_id, so we use the payload
+     That's where it would be anyway
+     hp->message_id = generate_id(); */
+  *ALLNET_MESSAGE_ID (hp, ALLNET_TRANSPORT_ACK_REQ, ALLNET_HEADER_SIZE + MESSAGE_ID_SIZE) = 0; // generate_id();
 }
 
 void ping (int rwpipes[2]) {
-  char packet [ALLNET_HEADER_SIZE];
+  char packet [ALLNET_HEADER_SIZE + MESSAGE_ID_SIZE];
   int psize = ALLNET_HEADER_SIZE;
   init_ping_packet (packet);
   log_packet ("broadcasting", packet, psize);
@@ -65,6 +75,7 @@ int main(int argc, char ** argv) {
   snprintf (log_buf, LOG_SIZE, "AllNet (aping) version %d\n", ALLNET_VERSION);
   log_print ();
   int rwpipes[2]; /* R/W pipes to/from abc */
+  /* TODO: start and connect to abc */
   ping (rwpipes);
   return 0;
 }
