@@ -31,6 +31,7 @@ bin_PROGRAMS = \
 	$(ALLNET_BINDIR)/acache \
 	$(ALLNET_BINDIR)/astart \
 	$(ALLNET_BINDIR)/astop \
+	$(ALLNET_BINDIR)/aping \
 	$(ALLNET_BINDIR)/abc
 
 __ALLNET_BINDIR__ad_SOURCES = ad.c ${adlink} ${includes}
@@ -40,6 +41,7 @@ __ALLNET_BINDIR__alocal_LDFLAGS = -lpthread
 __ALLNET_BINDIR__aip_SOURCES = aip.c mgmt.h listen.c ${includes}
 __ALLNET_BINDIR__aip_LDFLAGS = -lpthread
 __ALLNET_BINDIR__acache_SOURCES = acache.c ${includes}
+__ALLNET_BINDIR__aping_SOURCES = aping.c ${includes}
 __ALLNET_BINDIR__astart_SOURCES = astart.c ${includes}
 __ALLNET_BINDIR__astop_SOURCES = astart.c ${includes}
 
