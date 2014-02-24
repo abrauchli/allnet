@@ -9,6 +9,7 @@
 #include <stdio.h> /* snprintf */
 #include <stdlib.h>
 #include <string.h> /* bzero */
+#include <unistd.h> /* pipe */
 #include "lib/log.h"
 #include "lib/priority.h"
 #include "packet.h"
@@ -70,12 +71,58 @@ void ping (int rwpipes[2]) {
   }
 }
 
+static int create_pipes(int rwpipes[2]) {
+  if (pipe (rwpipes) != 0) {
+    perror ("pipe");
+    snprintf (log_buf, LOG_SIZE, "error creating pipe set\n");
+    log_print ();
+    return 1;
+  }
+  return 0;
+}
+
+static void itoa(char buf[12], int n) {
+    (void) snprintf (buf, 12, "%d", n);
+}
+
+static void start_abc (int rwpipes[2], char * iface)
+{
+  int pid = fork ();
+  if (pid == 0) {
+    char * args [5];
+    char ap[2][12];
+    itoa (ap[0], rwpipes [PIPE_READ]);
+    itoa (ap[1], rwpipes [PIPE_WRITE]);
+    args [0] = "abc"; // make_program_path (path, "abc");
+    args [1] = ap[0];
+    args [2] = ap[1];
+    args [3] = iface;
+    args [4] = NULL;
+    snprintf (log_buf, LOG_SIZE, "calling %s %s %s %s\n",
+              args [0], args [1], args [2], args [3]);
+    log_print ();
+    execv (args [0], args);
+    perror ("execv");
+    printf ("error executing abc\n");
+    exit (1);
+  } else {  /* parent, close the child pipes */
+    close (rwpipes [PIPE_READ]);
+    close (rwpipes [PIPE_WRITE]);
+    snprintf (log_buf, LOG_SIZE, "parent called abc %d %d %s, closed %d %d\n",
+              rwpipes [PIPE_READ], rwpipes [PIPE_WRITE], iface,
+              rwpipes [PIPE_READ], rwpipes [PIPE_WRITE]);
+    log_print ();
+  }
+}
+
 int main(int argc, char ** argv) {
   init_log ("aping");
   snprintf (log_buf, LOG_SIZE, "AllNet (aping) version %d\n", ALLNET_VERSION);
   log_print ();
   int rwpipes[2]; /* R/W pipes to/from abc */
-  /* TODO: start and connect to abc */
+  if (create_pipes(rwpipes) != 0)
+    return 1;
+  start_abc (rwpipes, "wlan0");
   ping (rwpipes);
   return 0;
 }
