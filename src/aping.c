@@ -106,11 +106,8 @@ static void start_abc (int rwpipes[2], char * iface)
     printf ("error executing abc\n");
     exit (1);
   } else {  /* parent, close the child pipes */
-    close (rwpipes [PIPE_READ]);
-    close (rwpipes [PIPE_WRITE]);
-    snprintf (log_buf, LOG_SIZE, "parent called abc %d %d %s, closed %d %d\n",
-              rwpipes [PIPE_READ], rwpipes [PIPE_WRITE], iface,
-              rwpipes [PIPE_READ], rwpipes [PIPE_WRITE]);
+    snprintf (log_buf, LOG_SIZE, "parent called abc %d %d %s\n",
+              rwpipes [PIPE_READ], rwpipes [PIPE_WRITE], iface);
     log_print ();
   }
 }
