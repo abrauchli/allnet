@@ -24,10 +24,12 @@ abcmoduleslibs += ${DBUS_LIBS}
 endif
 
 LDADD = $(ALLNET_LIBDIR)/liballnet-$(ALLNET_API_VERSION).la
-bin_PROGRAMS = $(ALLNET_BINDIR)/abc
+bin_PROGRAMS = $(ALLNET_BINDIR)/abc $(ALLNET_BINDIR)/abc-beacon
 __ALLNET_BINDIR__abc_SOURCES = abc.c abc-iface.h ${abcmodules} ${libincludes}
 __ALLNET_BINDIR__abc_CFLAGS = -I$(ALLNET_SRCDIR) ${abcmodulesinc}
 __ALLNET_BINDIR__abc_LDFLAGS = ${abcmoduleslibs}
+__ALLNET_BINDIR__abc_beacon_SOURCES = abc-beacon.c ${libincludes}
+__ALLNET_BINDIR__abc_beacon_CFLAGS = -I$(ALLNET_SRCDIR)
 
 install-exec-hook: 
 	cd $(DESTDIR)$(bindir) && \
