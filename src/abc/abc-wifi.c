@@ -10,13 +10,13 @@
 #include <string.h>
 #include <ifaddrs.h>
 #include <net/if.h>           /* ifa_flags */
-#include <netpacket/packet.h> /* struct sockaddr_ll */
+#include <sys/socket.h>       /* struct sockaddr */
 #include <sys/time.h>         /* gettimeofday */
 
 #include "lib/packet.h"       /* ALLNET_WIFI_PROTOCOL */
 #include "lib/util.h"         /* delta_us */
 
-#include "abc-iface.h"
+#include "abc-iface.h"        /* sockaddr_t */
 
 #define NUM_WIFI_CONFIG_IFACES 1
 #ifdef USE_NETWORK_MANAGER
@@ -36,7 +36,8 @@ const char * abc_wifi_config_type_strings[] = {
 
 /* forward declarations */
 static int abc_wifi_init (const char * interface, int * sock,
-                struct sockaddr_ll * address, struct sockaddr_ll * bc);
+                          sockaddr_t * address,
+                          sockaddr_t * bc);
 static int abc_wifi_is_enabled ();
 static int abc_wifi_set_enabled (int state);
 static int abc_wifi_cleanup ();
@@ -61,6 +62,7 @@ static abc_wifi_config_iface * wifi_config_types[] = {
 };
 static abc_wifi_config_iface * wifi_config_iface = NULL;
 
+#ifndef __APPLE__  /* not sure what replaces the sll addresses for apple */
 static void default_broadcast_address (struct sockaddr_ll * bc)
 {
   bc->sll_family = AF_PACKET;
@@ -95,6 +97,7 @@ static void print_sll_addr (struct sockaddr_ll * a, char * desc)
   if (desc != NULL)
     printf ("\n");
 }
+#endif /* __APPLE__ */
 
 static int abc_wifi_is_enabled ()
 {
@@ -118,7 +121,7 @@ static int abc_wifi_set_enabled (int state)
 /* if returning 0 or 1, fills in the socket and the address */
 /* to do: figure out how to set bits_per_s in init_wireless */
 static int abc_wifi_init (const char * interface, int * sock,
-                struct sockaddr_ll * address, struct sockaddr_ll * bc)
+                          sockaddr_t * address, sockaddr_t * bc)
 {
   if (abc_iface_wifi.iface_type_args != NULL) {
     int i;
@@ -142,6 +145,7 @@ static int abc_wifi_init (const char * interface, int * sock,
   }
   struct ifaddrs * ifa_loop = ifa;
   while (ifa_loop != NULL) {
+#ifndef __APPLE__  /* not sure how to do this for apple */
     if ((ifa_loop->ifa_addr->sa_family == AF_PACKET) &&
         (strcmp (ifa_loop->ifa_name, interface) == 0)) {
       struct timeval start;
@@ -186,6 +190,7 @@ static int abc_wifi_init (const char * interface, int * sock,
       freeifaddrs (ifa);
       return 1;
     }
+#endif /* __APPLE__ */
     ifa_loop = ifa_loop->ifa_next;
   }
   freeifaddrs (ifa);

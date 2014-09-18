@@ -2,7 +2,14 @@
 #define ABC_IFACE_H
 /* abc-iface.h: Bradcast abc messages onto a wireless interface */
 
+#ifndef __APPLE__
 #include <netpacket/packet.h>  /* struct sockaddr_ll */
+typedef struct sockaddr_ll sockaddr_t;
+#else /* __APPLE__ */
+#include <sys/socket.h>        /* struct sockaddr */
+#include <netinet/ip.h>        /* struct sockaddr_in */
+typedef struct sockaddr_in sockaddr_t;
+#endif /* __APPLE__ */
 
 /** enum of all compile-time supported abc iface modules */
 typedef enum abc_iface_type {
@@ -24,7 +31,7 @@ typedef struct abc_iface {
    * @return 1 if successful, 0 on failure.
    */
   int (* init_iface_cb) (const char * interface, int * sock,
-              struct sockaddr_ll * address, struct sockaddr_ll * bc);
+                         sockaddr_t * address, sockaddr_t * bc);
   /**
    * Time in ms it takes to turn on the interface.
    * The initial value provides a guideline and should be pretty conservative.

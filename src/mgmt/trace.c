@@ -29,6 +29,7 @@
 #include "lib/log.h"
 #include "lib/dcache.h"
 
+#ifndef NO_MAIN_FUNCTION
 static int get_nybble (char * string, int * offset)
 {
   char * p = string + *offset;
@@ -44,7 +45,9 @@ static int get_nybble (char * string, int * offset)
   *offset = p - string;   /* point to the offending character */
   return -1;
 }
+#endif /* NO_MAIN_FUNCTION */
 
+#ifndef NO_MAIN_FUNCTION
 static int get_byte (char * string, int * offset, unsigned char * result)
 {
   int first = get_nybble (string, offset);
@@ -58,11 +61,12 @@ static int get_byte (char * string, int * offset, unsigned char * result)
   /* printf ("get_byte returned %x\n", (*result) & 0xff); */
   return 8;
 }
+#endif /* NO_MAIN_FUNCTION */
 
+#ifndef NO_MAIN_FUNCTION
 static int get_address (char * address, unsigned char * result, int rsize)
 {
   int offset = 0;
-  int value = 0;
   int index = 0;
   int bits = 0;
   while (index < rsize) {
@@ -82,46 +86,24 @@ static int get_address (char * address, unsigned char * result, int rsize)
   }
   return bits;
 }
+#endif /* NO_MAIN_FUNCTION */
 
-static void callback (int type, int count, void * arg)
+static void init_trace_entry (struct allnet_mgmt_trace_entry * new_entry,
+                              int hops, struct timeval * now,
+                              unsigned char * my_address, int abits)
 {
-  if (type == 0)
-    printf (".");
-  else if (type == 1)
-    printf (",");
-  else if (type == 2)
-    printf ("!");
-  else if (type == 3)
-    printf (":");
-  else
-    printf ("?");
-  fflush (stdout);
-}
-  
-static void init_entry (struct allnet_mgmt_trace_entry * new_entry, int hops,
-                        struct timeval * now,
-                        unsigned char * my_address, int abits)
-{
-  unsigned long long int time = now->tv_sec;
-  if (time < ALLNET_Y2K_SECONDS_IN_UNIX) {
-    /* incorrect clock, or time travel */
-    new_entry->precision = 0;
+  bzero (new_entry, sizeof (struct allnet_mgmt_trace_entry));
+  /* assume accuracy is 1ms, or 3 decimal digits */
+  new_entry->precision = 64 + 3;
+  writeb64u (new_entry->seconds, now->tv_sec - ALLNET_Y2K_SECONDS_IN_UNIX);
+  writeb64u (new_entry->seconds_fraction, now->tv_usec / 1000);
+  if (now->tv_sec <= ALLNET_Y2K_SECONDS_IN_UNIX) { /* clock is wrong */
     writeb64u (new_entry->seconds, 0);
     writeb64u (new_entry->seconds_fraction, 0);
-  } else {
-    unsigned long long int usec = now->tv_usec;
-    if (hops == 0) {  /* special case: microsecond precision */
-      new_entry->precision = 64 + 6;   /* 6 digits, 1us precision */
-      writeb64u (new_entry->seconds, time - ALLNET_Y2K_SECONDS_IN_UNIX);
-      writeb64u (new_entry->seconds_fraction, usec);
-    } else {   /* the common case */
-      new_entry->precision = 64 + 3;   /* 3 digits, 1ms precision */
-      writeb64u (new_entry->seconds, time - ALLNET_Y2K_SECONDS_IN_UNIX);
-      writeb64u (new_entry->seconds_fraction, usec / 1000);
-    }
+    new_entry->precision = 0;
   }
-  new_entry->nbits = abits;
   new_entry->hops_seen = hops;
+  new_entry->nbits = abits;
   memcpy (new_entry->address, my_address, (abits + 7) / 8);
 }
 
@@ -161,7 +143,7 @@ static int add_my_entry (char * in, int insize, struct allnet_header * inhp,
       ((*result) + ALLNET_MGMT_HEADER_SIZE (t));
   trp->num_entries = n;
   struct allnet_mgmt_trace_entry * new_entry = trp->trace + (n - 1);
-  init_entry (new_entry, inhp->hops, now, my_address, abits);
+  init_trace_entry (new_entry, inhp->hops, now, my_address, abits);
   if (k > 0) {
     char * inkey = ((char *) (intrp->trace)) +
                    (sizeof (struct allnet_mgmt_trace_entry) * (n - 1));
@@ -231,7 +213,7 @@ static int make_trace_reply (struct allnet_header * inhp, int insize,
   for (i = 0; i + 1 < num_entries; i++)
     trp->trace [i] = intrp->trace [i + intrp->num_entries - (num_entries - 1)];
   struct allnet_mgmt_trace_entry * new_entry = trp->trace + (num_entries - 1);
-  init_entry (new_entry, inhp->hops, now, my_address, abits);
+  init_trace_entry (new_entry, inhp->hops, now, my_address, abits);
 
   int ksize = readb16u (intrp->pubkey_size);
   if (ksize > 0) {
@@ -251,8 +233,19 @@ static void get_my_addr (unsigned char * my_addr, int my_addr_size)
   /* init to a random value, in case there is no address in the file */
   random_bytes ((char *) my_addr, my_addr_size);
   int fd = open_read_config ("adht", "peers", 1);
-  if (fd < 0)
-    return;
+  int count = 0;
+  while (fd < 0) {  /* wait for adht to create the file */
+    sleep (1);
+    fd = open_read_config ("adht", "peers", 1);
+    if (count++ > 10) {
+      printf ("error: traced still waiting for adht peer file creation\n");
+      snprintf (log_buf, LOG_SIZE,
+                "error: traced still waiting for adht peer file creation\n");
+      log_print ();
+      if (count > 20)
+        exit (1);
+    }
+  }
 #define EXPECTED_FIRST_LINE	33  /* first line should always be 33 bytes */
   char line [EXPECTED_FIRST_LINE];
   int n = read (fd, line, EXPECTED_FIRST_LINE);
@@ -274,6 +267,7 @@ static void get_my_addr (unsigned char * my_addr, int my_addr_size)
   }
 }
 
+/*
 static void debug_prt_trace_id (void * state, void * n)
 {
   print_buffer (n, MESSAGE_ID_SIZE, NULL, MESSAGE_ID_SIZE, 1);
@@ -284,6 +278,7 @@ static void debug_prt_trace_id (void * state, void * n)
                               log_buf + offset, LOG_SIZE - offset);
   * ((int *) state) = offset;
 }
+*/
 
 static int same_trace_id (void * n1, void * n2)
 {
@@ -414,7 +409,7 @@ static void respond_to_trace (int sock, char * message, int msize,
     log_print ();
   }
 
-  char * response;
+  char * response = NULL;
   int rsize = 0;
   if (trp->intermediate_replies) {   /* generate a reply */
 
@@ -469,7 +464,9 @@ static void main_loop (int sock, unsigned char * my_address, int nbits,
     int timeout = PIPE_MESSAGE_WAIT_FOREVER;
     int found = receive_pipe_message_any (timeout, &message, &pipe, &pri);
     if (found < 0) {
-      printf ("traced pipe closed, exiting\n");
+      snprintf (log_buf, LOG_SIZE, "traced pipe closed, exiting\n");
+      log_print ();
+      /* printf ("traced pipe closed, exiting\n"); */
       exit (1);
     }
 #ifdef DEBUG_PRINT
@@ -484,6 +481,7 @@ static void main_loop (int sock, unsigned char * my_address, int nbits,
   }
 }
 
+#ifndef NO_MAIN_FUNCTION
 static void send_trace (int sock, unsigned char * address, int abits,
                         char * trace_id,
                         unsigned char * my_address, int my_abits, int max_hops)
@@ -518,7 +516,7 @@ static void send_trace (int sock, unsigned char * address, int abits,
   memcpy (trp->trace_id, trace_id, MESSAGE_ID_SIZE);
   struct timeval time;
   gettimeofday (&time, NULL);
-  init_entry (trp->trace, 0, &time, my_address, my_abits);
+  init_trace_entry (trp->trace, 0, &time, my_address, my_abits);
 
 /*  print_packet (buffer, total_size, "sending trace", 1);
   snprintf (log_buf, LOG_SIZE, "sending trace of size %d\n", total_size);
@@ -634,7 +632,9 @@ static void print_entry (struct allnet_mgmt_trace_entry * entry,
   if (print_eol)
     printf ("\n");
 }
+#endif /* NO_MAIN_FUNCTION */
 
+#ifndef NO_MAIN_FUNCTION
 static void print_trace_result (struct allnet_mgmt_trace_reply * trp,
                                 struct timeval start,
                                 struct timeval finish)
@@ -672,7 +672,9 @@ static void print_trace_result (struct allnet_mgmt_trace_reply * trp,
     printf ("intermediate response with %d entries\n", trp->num_entries);
   }
 }
+#endif /* NO_MAIN_FUNCTION */
 
+#ifndef NO_MAIN_FUNCTION
 static void handle_packet (char * message, int msize, char * seeking,
                            struct timeval start)
 {
@@ -717,7 +719,9 @@ static void handle_packet (char * message, int msize, char * seeking,
   log_print ();
   print_trace_result (trp, start, now);
 }
+#endif /* NO_MAIN_FUNCTION */
 
+#ifndef NO_MAIN_FUNCTION
 static void wait_for_responses (int sock, char * trace_id, int sec)
 {
   num_arrivals = 0;   /* not received anything yet */
@@ -731,7 +735,9 @@ static void wait_for_responses (int sock, char * trace_id, int sec)
     int ms = remaining * 1000 + 999;
     int found = receive_pipe_message_any (ms, &message, &pipe, &pri);
     if (found <= 0) {
-      printf ("trace pipe closed, exiting\n");
+#ifdef DEBUG_PRINT
+      printf ("trace pipe closed, exiting\n");  
+#endif /* DEBUG_PRINT */
       exit (1);
     }
     struct timeval start_copy = start;
@@ -741,7 +747,9 @@ static void wait_for_responses (int sock, char * trace_id, int sec)
   }
   printf ("timeout\n");
 }
+#endif /* NO_MAIN_FUNCTION */
 
+#ifndef NO_MAIN_FUNCTION
 static void usage (char * pname, int daemon)
 {
   if (daemon) {
@@ -752,23 +760,45 @@ static void usage (char * pname, int daemon)
             pname);
   }
 }
+#endif /* NO_MAIN_FUNCTION */
 
+void traced_main (char * pname)
+{
+  int sock = connect_to_local (pname, pname);
+  if (sock < 0)
+    return;
+
+  unsigned char address [ADDRESS_SIZE];
+  bzero (address, sizeof (address));  /* set any unused part to all zeros */
+  int abits = 16;
+  get_my_addr (address, sizeof (address));
+
+#ifdef DEBUG_PRINT
+  printf ("trace daemon (m %d) for %d bits: ", match_only, abits);
+  print_bitstring (address, 0, abits, 1);
+#endif /* DEBUG_PRINT */
+  main_loop (sock, address, abits, 0, 0);
+  printf ("trace error: main loop returned\n");
+  return;
+}
+
+#ifndef NO_MAIN_FUNCTION
+/* global debugging variable -- if 1, expect more debugging output */
+/* set in main */
+int allnet_global_debugging = 0;
+
+/* parts of this duplicate some of the code in traced_main, but
+ * supporting the address on the command line seems like a useful feature */
 int main (int argc, char ** argv)
 {
+  int verbose = get_option ('v', &argc, argv);
+  if (verbose)
+    allnet_global_debugging = verbose;
+  int match_only = get_option ('m', &argc, argv);
+
   int is_daemon = 0;
   if (strstr (argv [0], "traced") != NULL)  /* called as daemon */
     is_daemon = 1;
-
-  int match_only = 0;
-  int i, j;
-  for (i = 1; i < argc; i++) {
-    if (match_only) {
-      argv [i] = argv [i + 1];
-    } else if (strcmp (argv [i], "-m") == 0) {
-      match_only = 1;
-      argc--;
-    }
-  }
 
   if ((argc > 2) && ((is_daemon) || (argc > 3))) {
     printf ("argc %d, at most %d allowed for %s\n", argc,
@@ -828,3 +858,4 @@ int main (int argc, char ** argv)
   }
   return 0;
 }
+#endif /* NO_MAIN_FUNCTION */

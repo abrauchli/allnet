@@ -192,35 +192,46 @@ static int send_buffer (int pipe, char * buffer, int blen, int do_free)
   if ((w < 0) && ((errno == EAGAIN) || (errno == EWOULDBLOCK)))
     is_partial_send = 1;
   if (is_partial_send) {
-    static int printed = -1;
-    if (printed != pipe) {
+    static int partial_printed = -1;
+    if (partial_printed != pipe) {
       snprintf (log_buf, LOG_SIZE,
                 "pipe %d, result %d, wanted %d, original errno %d\n",
                 pipe, w, blen, save_errno);
       log_error ("send_pipe_msg partial send");
-      printed = pipe;
+      partial_printed = pipe;
     }
     result = 0;
   } else {
     /* try to send with write -- I don't think this has ever been used */
     if ((w < 0) && (errno == ENOTSOCK)) {
+static int notsock_printed = -1;
+if (notsock_printed != pipe) {
 snprintf (log_buf, LOG_SIZE, "trying write instead of send on fd %d\n", pipe);
 log_print ();
+notsock_printed = pipe;
+}
       w = write (pipe, buffer, blen); 
       is_send = 0;
     }
-    static int printed = -1;
-    if ((w != blen) && (printed != pipe)) {
-      printed = pipe;
-      char * name = "send_pipe_msg write";
-      if (is_send)
-        name = "send_pipe_msg send";
-      perror (name);
-      snprintf (log_buf, LOG_SIZE,
-                "pipe %d, result %d, wanted %d, original errno %d\n",
-                pipe, w, blen, save_errno);
-      log_error (name);
-      result = 0;
+    if (w != blen) {
+      static int badwrite_printed = -1;
+      if (badwrite_printed != pipe) {
+        badwrite_printed = pipe;
+        char * name = "send_pipe_msg write";
+        if (is_send)
+          name = "send_pipe_msg send";
+        if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
+          perror (name);
+        snprintf (log_buf, LOG_SIZE,
+                  "pipe %d, result %d, wanted %d, original errno %d\n",
+                  pipe, w, blen, save_errno);
+        log_error (name);
+      }
+/* 2014/08/11 not sure if this is correct: should return 0 even if pipe is
+ * busy, because we did not write.  But if we do this, daemons think their
+ * pipe to ad has been closed, and terminate.  */
+      if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
+        result = 0;
     }
   }
 #ifdef DEBUG_PRINT
@@ -508,11 +519,12 @@ static int receive_bytes (int pipe, char * buffer, int blen, int may_block)
     if ((! may_block) && (! fd_can_recv (pipe, 0)))
       return recvd;   /* not ready to receive, and should not block */
     /* if we did not call fd_can_recv, the call to read may block */
-/*  printf ("read (%d, %p, %d) => ", pipe, buffer + recvd, blen - recvd); */
     int new_recvd = read (pipe, buffer + recvd, blen - recvd);
-/*  printf ("%d\n", new_recvd); */
     if (new_recvd <= 0) {
-      if (new_recvd < 0)
+      if (new_recvd == 0) {
+        snprintf (log_buf, LOG_SIZE, "receive_bytes: pipe %d is closed\n", pipe);
+        log_print ();
+      } else
         perror ("pipemsg.c receive_bytes read");
 #ifdef DEBUG_PRINT
 #endif /* DEBUG_PRINT */
@@ -520,10 +532,7 @@ static int receive_bytes (int pipe, char * buffer, int blen, int may_block)
                 "receive_bytes: %d/%d bytes on pipe %d, expected %d/%d\n",
                 new_recvd, recvd, pipe, blen - recvd, blen);
       log_print ();
-      if ((new_recvd == 0) && (recvd > 0))
-        return recvd; /* return this data for now, and -1 next time */
-      /* not received anything yet -- error or closed pipe */
-      return -1;  /* error */
+      return recvd > 0 ? recvd : -1 /* error */;
     }
     recvd += new_recvd;
   }
@@ -552,8 +561,9 @@ static int parse_header (char * header, int pipe, int * priority)
     log_print ();
   }
   printed = 0;
-  *priority = read_big_endian32 (header + MAGIC_SIZE);
-  return      read_big_endian32 (header + MAGIC_SIZE + PRIORITY_SIZE);
+  if (priority != NULL)
+    *priority = read_big_endian32 (header + MAGIC_SIZE);
+  return        read_big_endian32 (header + MAGIC_SIZE + PRIORITY_SIZE);
 }
 
 /* shift the header left by one position, to make room for one more char */

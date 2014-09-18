@@ -359,17 +359,17 @@ static void respond_to_dht (int sock, char * message, int msize)
 #endif /* DEBUG_PRINT */
 }
 
-int main (int argc, char ** argv)
+void adht_main (char * pname)
 {
   /* connect to alocal */
-  int sock = connect_to_local ("adht", argv [0]);
+  int sock = connect_to_local ("adht", pname);
   if (sock < 0)
-    return 1;
+    return;
 
   pthread_t send_thread;
   if (pthread_create (&send_thread, NULL, send_loop, &sock) != 0) {
     perror ("pthread_create/addrs");
-    return 1;
+    return;
   }
   while (1) {
     char * message;
@@ -377,7 +377,7 @@ int main (int argc, char ** argv)
     int timeout = PIPE_MESSAGE_WAIT_FOREVER;
     int found = receive_pipe_message_any (timeout, &message, &pipe, &pri);
     if (found < 0) {
-      printf ("adht: pipe closed, exiting\n");
+      /* printf ("adht: pipe closed, exiting\n"); */
       pthread_cancel (send_thread);
       exit (1);
     }
@@ -388,3 +388,19 @@ int main (int argc, char ** argv)
     free (message);
   }
 }
+
+#ifndef NO_MAIN_FUNCTION
+/* global debugging variable -- if 1, expect more debugging output */
+/* set in main */
+int allnet_global_debugging = 0;
+
+int main (int argc, char ** argv)
+{
+  int verbose = get_option ('v', &argc, argv);
+  if (verbose)
+    allnet_global_debugging = verbose;
+
+  adht_main (argv [0]);
+  return 1;
+}
+#endif /* NO_MAIN_FUNCTION */

@@ -14,7 +14,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
+#ifndef __APPLE__
 #include <netpacket/packet.h>
+#endif /* __APPLE__ */
 #include <arpa/inet.h>
 
 #include "packet.h"
@@ -94,6 +96,7 @@ static char * mtype_to_string (int mtype)
   }
 }
 
+#if 0
 static char * mgmt_type_to_string (int mtype)
 {
   switch (mtype) {
@@ -117,6 +120,7 @@ static char * mgmt_type_to_string (int mtype)
     return "unknown management type";
   }
 }
+#endif /* 0 */
 
 /* returned buffer is statically allocated */
 static char * b2s (const char * buffer, int count)
@@ -544,7 +548,9 @@ int print_sockaddr_str (struct sockaddr * sap, int addr_size, int tcp,
   struct sockaddr_in  * sin  = (struct sockaddr_in  *) sap;
   struct sockaddr_in6 * sin6 = (struct sockaddr_in6 *) sap;
   struct sockaddr_un  * sun  = (struct sockaddr_un  *) sap;
+#ifndef __APPLE__
   struct sockaddr_ll  * sll  = (struct sockaddr_ll  *) sap;
+#endif /* __APPLE__ */
   /* char str [INET_ADDRSTRLEN]; */
   int num_initial_zeros = 0;  /* for printing ipv6 addrs */
   int n = 0;   /* offset for printing */
@@ -589,6 +595,7 @@ int print_sockaddr_str (struct sockaddr * sap, int addr_size, int tcp,
       n += snprintf (s + n, len - n, " (size %d rather than %zd)",
                      addr_size, sizeof (struct sockaddr_un));
     break;
+#ifndef __APPLE__
   case AF_PACKET:
     n += snprintf (s + n, len - n,
                    "packet protocol%s 0x%x if %d ha %d pkt %d address (%d)",
@@ -600,6 +607,7 @@ int print_sockaddr_str (struct sockaddr * sap, int addr_size, int tcp,
       n += snprintf (s + n, len - n, " (size %d rather than %zd)",
                      addr_size, sizeof (struct sockaddr_ll));
     break;
+#endif /* __APPLE__ */
   default:
     n += snprintf (s + n, len - n, "unknown address family %d%s",
                    sap->sa_family, proto);
@@ -773,7 +781,7 @@ void allnet_localtime_string (unsigned long long int allnet_seconds,
 
 /* useful time functions */
 /* if t1 < t2, returns 0, otherwise returns t1 - t2 */
-unsigned long long delta_us (struct timeval * t1, struct timeval * t2)
+unsigned long long delta_us (const struct timeval * t1, const struct timeval * t2)
 {
   if ((t1->tv_sec < t2->tv_sec) ||
       ((t1->tv_sec == t2->tv_sec) &&
@@ -823,7 +831,7 @@ time_t compute_next (time_t from, time_t granularity, int immediate_ok)
 }
 
 /* set result to a random time between start + min and start + max */
-void set_time_random (struct timeval * start, unsigned long long min,
+void set_time_random (const struct timeval * start, unsigned long long min,
                       unsigned long long max, struct timeval * result)
 {
   if (min <= max) {
@@ -1241,5 +1249,37 @@ void print_gethostbyname_error (char * hostname)
     break;
   }
   log_print ();
+}
+
+/* assuming option_letter is 'v', returns 1 if argv has '-v', 0 otherwise
+ * if it returns 1, removes the -v from the argv, and decrements *argcp.
+ */
+int get_option (char option_letter, int * argcp, char ** argv)
+{
+  char buf [] = "-o";  /* o for option */
+  buf [1] = option_letter;
+  int orig_argc = *argcp;
+  int i;
+  for (i = 1; i < orig_argc; i++) {
+    if (strcmp (argv [i], buf) == 0) {  /* found a match */
+      int j;
+      for (j = i; j + 1 < orig_argc; j++)
+        argv [j] = argv [j + 1];
+      *argcp = orig_argc - 1;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/* set user_callable to 1 for astart and allnetx, to 0 for all others */
+void print_usage (int argc, char ** argv, int user_callable, int do_exit)
+{
+  if (user_callable)
+    printf ("usage: %s [-v] [interface1 [interface2]]\n", argv [0]);
+  else
+    printf ("%s should only be called from astart or allnetx\n", argv [0]);
+  if (do_exit)
+    exit (1);
 }
 

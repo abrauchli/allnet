@@ -38,7 +38,7 @@ static void send_key (int sock, struct bc_key_info * key, char * return_key,
     printf ("calling encrypt (%p/%d, %d, %p, %d) ==> %p\n",
             data, dlen, key->pub_klen, return_key, rksize, &cipher);
 #endif /* DEBUG_PRINT */
-    int csize = encrypt (data, dlen, return_key, rksize, &cipher);
+    int csize = allnet_encrypt (data, dlen, return_key, rksize, &cipher);
     if (csize <= 0) {
       snprintf (log_buf, LOG_SIZE, "send_key: encryption error\n");
       log_print ();
@@ -144,11 +144,11 @@ hp->source [0] & 0xff, hp->src_nbits);
   }
 }
 
-int main (int argc, char ** argv)
+void keyd_main (char * pname)
 {
-  int sock = connect_to_local (argv [0], argv [0]);
+  int sock = connect_to_local (pname, pname);
   if (sock < 0)
-    return 1;
+    return;
 
   while (1) {  /* loop forever */
     int pipe;
@@ -168,4 +168,19 @@ int main (int argc, char ** argv)
   snprintf (log_buf, LOG_SIZE, "keyd infinite loop ended, exiting\n");
   log_print ();
 }
+
+#ifndef NO_MAIN_FUNCTION
+/* global debugging variable -- if 1, expect more debugging output */
+/* set in main */
+int allnet_global_debugging = 0;
+
+int main (int argc, char ** argv)
+{
+  int verbose = get_option ('v', &argc, argv);
+  if (verbose)
+    allnet_global_debugging = verbose;
+  keyd_main (argv [0]);
+  return 0;
+}
+#endif /* NO_MAIN_FUNCTION */
 
