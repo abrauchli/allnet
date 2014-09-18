@@ -29,7 +29,8 @@ static void send_beacon (int sockfd, const char * interface, struct sockaddr * a
                NULL, 0, NULL, 0, NULL);
 
   mp->mgmt_type = ALLNET_MGMT_BEACON;
-  for (int i = 0; i < nbeacons; ++i) {
+  int i;
+  for (i = 0; i < nbeacons; ++i) {
     random_bytes ((char *)mbp->receiver_nonce, NONCE_SIZE);
     if (nbeacons > 1)
       mbp->receiver_nonce[NONCE_SIZE -1] = (char)i;
@@ -72,11 +73,11 @@ int main (int argc, char ** argv) {
     char cmd[512];
     int ret = system ("rfkill unblock wifi");
     snprintf (cmd, 512, "ifconfig %s up", iface);
-    system (cmd);
+    ret = system (cmd);
     snprintf (cmd, 512, "iw dev %s set type ibss", iface);
-    system (cmd);
+    ret = system (cmd);
     snprintf (cmd, 512, "iw dev %s ibss join allnet 2412 fixed-freq", iface);
-    system (cmd);
+    ret = system (cmd);
     sleep (1);
   }
   int nbeacons = 1;
