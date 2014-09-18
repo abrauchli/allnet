@@ -56,6 +56,10 @@ static void default_broadcast_address (struct sockaddr_ll * bc)
   bc->sll_addr [5] = 0xff;
 }
 
+/* global debugging variable -- if 1, expect more debugging output */
+/* set in main */
+int allnet_global_debugging = 0;
+
 int main (int argc, char ** argv) {
   if (argc < 2) {
     printf ("usage %s [interface] [setup-net]\n", argv[0]);

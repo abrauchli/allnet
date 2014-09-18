@@ -34,7 +34,8 @@ __ALLNET_BINDIR__abc_SOURCES = abc.c abc-iface.h ${abcmodules} ${libincludes}
 __ALLNET_BINDIR__abc_CFLAGS = -I$(ALLNET_SRCDIR) ${abcmodulesinc}
 __ALLNET_BINDIR__abc_LDFLAGS = ${abcmoduleslibs}
 __ALLNET_BINDIR__abc_beacon_SOURCES = abc-beacon.c ${libincludes}
-__ALLNET_BINDIR__abc_beacon_CFLAGS = -I$(ALLNET_SRCDIR)
+__ALLNET_BINDIR__abc_beacon_CFLAGS = -I$(ALLNET_SRCDIR) ${abcmodulesinc}
+__ALLNET_BINDIR__abc_beacon_LDFLAGS = ${abcmoduleslibs}
 
 install-exec-hook: 
 	cd $(DESTDIR)$(bindir) && \
